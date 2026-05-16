@@ -1,128 +1,301 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
+"""航班价格监控 - 通用版本，无硬编码路径
+
+配置文件查找顺序:
+  1. --config 参数指定的路径
+  2. 环境变量 FLIGHT_MONITOR_CONFIG
+  3. ./config.yaml (脚本同目录)
+  4. ~/.config/flight-monitor/config.yaml
+
+数据目录查找顺序:
+  1. 环境变量 FLIGHT_MONITOR_DATA_DIR
+  2. ./data/ (脚本同目录下)
+  3. ~/.local/share/flight-monitor/
+"""
 import sys
 if sys.platform == 'win32':
     sys.stdout.reconfigure(encoding='utf-8')
     sys.stderr.reconfigure(encoding='utf-8')
 
-"""航班价格监控 - 基于考试日程动态计算航班日期"""
-import json, os, subprocess, re
+import json, os, subprocess, re, argparse
 from datetime import datetime, date, timedelta
 from pathlib import Path
 
-# ===== 考试日程 (via exam-prep-2026 GitHub 验证) =====
-EXAM_SCHEDULE = {
-    "阪大": {
-        "笔试": date(2026, 8, 1),   # 8/1(土) 9-12時 @吹田
-        "面试": date(2026, 8, 3),   # 8/3(月) 10:30～ @吹田
-    },
-    "东科大": {
-        "笔试": date(2026, 8, 18),  # 8/18(火) 9:30-12:00 @東科大
-        "面试": date(2026, 8, 24),  # 8/24(月) 口頭試問(専門+英語上位者のみ)
-    },
-    "东大": {
-        "笔试": date(2026, 8, 20),  # 8/20(木) 一般教育科目(数学or编程)
-        "専門": date(2026, 8, 26),  # 8/26(水) 13:00-15:30 創造情報学
-        "面试": date(2026, 8, 27),  # 8/27(木) 口述試験 @工6号館
-    },
-    "九大": {
-        "笔试": date(2026, 8, 25),  # 8/25(火) 9:00-17:30 @伊都(一天搞定,无面试)
-    },
-}
+# ===== 配置文件加载 =====
 
-# ===== 航线定义：基于考试日程自动计算日期 =====
-# 每条路线定义一个 "flight_date" 计算函数
-# 参数: EXAM_SCHEDULE -> date
+def find_config():
+    """按优先级查找配置文件"""
+    # 1. 命令行参数 (由 main 解析后传入)
+    # 2. 环境变量
+    env_cfg = os.environ.get("FLIGHT_MONITOR_CONFIG")
+    if env_cfg and Path(env_cfg).exists():
+        return Path(env_cfg)
+    # 3. 脚本同目录
+    script_dir = Path(__file__).parent
+    local_cfg = script_dir / "config.yaml"
+    if local_cfg.exists():
+        return local_cfg
+    # 4. ~/.config/flight-monitor/config.yaml
+    user_cfg = Path.home() / ".config" / "flight-monitor" / "config.yaml"
+    if user_cfg.exists():
+        return user_cfg
+    return None
+
+def find_data_dir():
+    """按优先级查找数据目录"""
+    env_data = os.environ.get("FLIGHT_MONITOR_DATA_DIR")
+    if env_data:
+        p = Path(env_data)
+        p.mkdir(parents=True, exist_ok=True)
+        return p
+    # 默认: 脚本同目录/data/
+    script_dir = Path(__file__).parent
+    local_data = script_dir / "data"
+    local_data.mkdir(parents=True, exist_ok=True)
+    return local_data
+
+def load_config(config_path=None):
+    """加载 YAML 配置文件 (纯 Python 实现，不依赖 PyYAML)"""
+    if config_path is None:
+        config_path = find_config()
+    if config_path is None:
+        print("❌ 未找到配置文件！请创建 config.yaml")
+        print("   路径: ./config.yaml 或 ~/.config/flight-monitor/config.yaml")
+        print("   或设置环境变量: FLIGHT_MONITOR_CONFIG=/path/to/config.yaml")
+        sys.exit(1)
+
+    with open(config_path, encoding="utf-8") as f:
+        text = f.read()
+
+    # 简易 YAML 解析 (支持嵌套字典和列表，足够本配置使用)
+    return parse_yaml(text)
+
+def parse_yaml(text):
+    """简易 YAML 解析器 - 支持 key: value, 嵌套缩进, 列表"""
+    result = {}
+    current_dict = result
+    dict_stack = []
+    key_stack = []
+    list_mode = False
+    list_items = []
+    list_key = None
+
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+
+        indent = len(line) - len(line.lstrip())
+
+        # 列表项
+        if stripped.startswith("- "):
+            if list_key and not list_mode:
+                list_mode = True
+                list_items = []
+            if list_mode:
+                item = parse_yaml_value(stripped[2:].strip())
+                # 检查是否是 key: value 格式的列表项
+                if isinstance(item, str) and ": " in item:
+                    # 解析为字典
+                    item_dict = {}
+                    for pair in stripped[2:].strip().split(", "):
+                        if ": " in pair:
+                            k, v = pair.split(": ", 1)
+                            item_dict[k.strip()] = parse_yaml_value(v.strip())
+                    list_items.append(item_dict)
+                else:
+                    list_items.append(item)
+            continue
+
+        # 如果从列表模式回到普通模式
+        if list_mode and indent == 0:
+            current_dict[list_key] = list_items
+            list_mode = False
+            list_items = []
+            list_key = None
+
+        # key: value
+        if ": " in stripped:
+            key, value = stripped.split(": ", 1)
+            key = key.strip()
+            value = value.strip()
+
+            if value:
+                current_dict[key] = parse_yaml_value(value)
+            else:
+                # 嵌套字典或列表的开始
+                dict_stack.append(current_dict)
+                key_stack.append(key)
+                current_dict[key] = {}
+                current_dict = current_dict[key]
+        elif stripped.endswith(":"):
+            key = stripped[:-1].strip()
+            dict_stack.append(current_dict)
+            key_stack.append(key)
+            current_dict[key] = {}
+            current_dict = current_dict[key]
+            # 也可能是列表
+            list_key = key
+
+    # 收尾
+    if list_mode and list_key:
+        # 找到 list_key 所在的字典
+        target = result
+        # 简单处理: 直接设置
+        if list_key in result:
+            result[list_key] = list_items
+
+    return result
+
+def parse_yaml_value(value):
+    """解析 YAML 值"""
+    if value.startswith('"') and value.endswith('"'):
+        return value[1:-1]
+    if value.lower() in ("true", "yes"):
+        return True
+    if value.lower() in ("false", "no"):
+        return False
+    try:
+        return int(value)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        pass
+    return value
+
+# ===== 考试日程解析 =====
+
+def parse_exam_schedule(raw):
+    """将配置中的考试日程字符串解析为 date 对象"""
+    schedule = {}
+    for uni, exams in raw.items():
+        schedule[uni] = {}
+        for exam_type, date_str in exams.items():
+            if isinstance(date_str, date):
+                schedule[uni][exam_type] = date_str
+            elif isinstance(date_str, str):
+                schedule[uni][exam_type] = datetime.strptime(date_str, "%Y-%m-%d").date()
+    return schedule
 
 def fmt_date(d):
     """格式化日期，去掉前导零"""
     return f"{d.month}/{d.day}"
 
-def calc_flight_dates(schedule):
-    """基于考试日程计算所有航班日期"""
-    阪大 = schedule["阪大"]
-    东科大 = schedule["东科大"]
-    东大 = schedule["东大"]
-    九大 = schedule["九大"]
-    
-    routes = [
-        {
-            "id": 1,
-            "from": "PVG", "to": "KIX",
-            "date": (阪大["笔试"] - timedelta(days=1)).strftime("%Y-%m-%d"),
-            "label": "上海→大阪 (考前1天)",
-            "context": f"阪大 {fmt_date(阪大['笔试'])} 笔试 | {fmt_date(阪大['面试'])} 面试",
-            "target": 1000,
-        },
-        {
-            "id": 2,
-            "from": "KIX", "to": "PVG",
-            "date": (阪大["面试"]).strftime("%Y-%m-%d"),
-            "label": "大阪→上海 (面试当天)",
-            "context": f"阪大 {fmt_date(阪大['面试'])} 面试结束→当晚回国递签",
-            "target": 1000,
-        },
-        {
-            "id": 3,
-            "from": "PVG", "to": "HND",
-            "date": (东科大["笔试"] - timedelta(days=1)).strftime("%Y-%m-%d"),
-            "label": "上海→东京 (东科大考前1天)",
-            "context": f"东科大 {fmt_date(东科大['笔试'])} 笔试 | {fmt_date(东科大['面试'])} 面试 | 东大 {fmt_date(东大['笔试'])} 笔试",
-            "target": 1000,
-        },
-        {
-            "id": 4,
-            "from": "HND", "to": "FUK",
-            "date": (九大["笔试"] - timedelta(days=1)).strftime("%Y-%m-%d"),
-            "label": "东京→福冈 (九大考前1天)",
-            "context": f"⚠️与东科大面试({fmt_date(东科大['面试'])})同日 | 九大 {fmt_date(九大['笔试'])} 笔试",
-            "target": 1000,
-        },
-        {
-            "id": 5,
-            "from": "FUK", "to": "HND",
-            "date": (九大["笔试"]).strftime("%Y-%m-%d"),
-            "label": "福冈→东京 (九大当天回)",
-            "context": f"九大笔试 {fmt_date(九大['笔试'])} 17:30结束→傍晚回东京 | 东大 {fmt_date(东大['専門'])} 専門",
-            "target": 1000,
-            "min_departure_hour": 18,  # 考试17:30结束，必须18:00后起飞
-        },
-        {
-            "id": 6,
-            "from": "HND", "to": "PVG",
-            "date": (东大["面试"] + timedelta(days=1)).strftime("%Y-%m-%d"),
-            "label": "东京→上海 (返程)",
-            "context": f"东大 {fmt_date(东大['面试'])} 口述→全部考试结束→回国",
-            "target": 1000,
-        },
-    ]
+def resolve_auto_date(auto_expr, schedule):
+    """解析 auto_date 表达式，如 '阪大.笔试 - 1' 或 '东大.面试 + 1'"""
+    if not auto_expr:
+        return None
+
+    # 匹配: 学校.考试类型 [+/- N]
+    m = re.match(r'(\w+)\.(\w+)\s*([+-]\s*\d+)?', auto_expr)
+    if not m:
+        return None
+
+    uni = m.group(1)
+    exam = m.group(2)
+    offset = int(m.group(3).replace(" ", "")) if m.group(3) else 0
+
+    if uni not in schedule or exam not in schedule[uni]:
+        print(f"⚠️ 无法解析 auto_date: {auto_expr} (未找到 {uni}.{exam})")
+        return None
+
+    return schedule[uni][exam] + timedelta(days=offset)
+
+def build_routes(config, schedule):
+    """从配置构建航线列表"""
+    target_price = config.get("target_price", 1000)
+    routes_cfg = config.get("routes", [])
+
+    routes = []
+    for r in routes_cfg:
+        # 解析日期
+        if r.get("date"):
+            fdate = datetime.strptime(r["date"], "%Y-%m-%d").date()
+        elif r.get("auto_date"):
+            fdate = resolve_auto_date(r["auto_date"], schedule)
+        else:
+            continue
+
+        if fdate is None:
+            continue
+
+        route = {
+            "id": r["id"],
+            "from": r["from"],
+            "to": r["to"],
+            "date": fdate.strftime("%Y-%m-%d"),
+            "label": r.get("label", f"{r['from']}→{r['to']}"),
+            "context": r.get("context", ""),
+            "target": r.get("target", target_price),
+        }
+        if "min_departure_hour" in r:
+            route["min_departure_hour"] = r["min_departure_hour"]
+        routes.append(route)
+
     return routes
 
-# ===== 配置 =====
-SKILL_DIR = Path(r"C:\Users\LENOVO\.agents\skills\flights")
-SCRIPT = str(SKILL_DIR / "scripts" / "flights-search")
-DATA_DIR = Path(r"C:\Users\LENOVO\.qclaw\data\flight_monitor")
-DATA_FILE = DATA_DIR / "flight_prices.json"
-EXCHANGE_RATE = 7.2
+# ===== 数据管理 =====
 
-def init_data():
-    DATA_DIR.mkdir(parents=True, exist_ok=True)
-    if not DATA_FILE.exists():
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump({"routes": {}, "last_update": "", "exam_schedule": {k: {sk: str(sv) for sk, sv in v.items()} for k, v in EXAM_SCHEDULE.items()}}, f, ensure_ascii=False)
+def init_data(data_file):
+    data_dir = data_file.parent
+    data_dir.mkdir(parents=True, exist_ok=True)
+    if not data_file.exists():
+        with open(data_file, "w", encoding="utf-8") as f:
+            json.dump({"routes": {}, "last_update": ""}, f, ensure_ascii=False)
 
-def load():
-    if DATA_FILE.exists():
-        with open(DATA_FILE, encoding="utf-8") as f:
+def load(data_file):
+    if data_file.exists():
+        with open(data_file, encoding="utf-8") as f:
             return json.load(f)
-    return {"routes": {}, "exam_schedule": {}}
+    return {"routes": {}}
 
-def save(data):
-    with open(DATA_FILE, "w", encoding="utf-8") as f:
+def save(data, data_file):
+    with open(data_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)
 
+# ===== 航班查询 =====
+
+def find_flights_cli():
+    """自动查找 flights-search CLI 路径"""
+    # 1. 环境变量
+    env_path = os.environ.get("FLIGHTS_SEARCH_PATH")
+    if env_path and Path(env_path).exists():
+        return env_path
+
+    # 2. 常见 skill 安装位置
+    candidates = [
+        Path.home() / ".agents" / "skills" / "flights" / "scripts" / "flights-search",
+        Path.home() / ".qclaw" / "skills" / "flights" / "scripts" / "flights-search",
+    ]
+    # Windows 也检查
+    if sys.platform == 'win32':
+        candidates = [
+            Path.home() / ".agents" / "skills" / "flights" / "scripts" / "flights-search",
+            Path.home() / ".qclaw" / "skills" / "flights" / "scripts" / "flights-search",
+        ]
+
+    for c in candidates:
+        if c.exists():
+            return str(c)
+
+    # 3. 脚本同目录下的 scripts/
+    local = Path(__file__).parent / "scripts" / "flights-search"
+    if local.exists():
+        return str(local)
+
+    return None
+
+def get_skill_dir(cli_path):
+    """从 CLI 路径推导 skill 目录"""
+    if cli_path:
+        return str(Path(cli_path).parent.parent)
+    return None
+
 def parse_hour(depart_str):
-    """解析 '3:05 PM' -> 15, '11:00 AM' -> 11, None if unparseable"""
+    """解析 '3:05 PM' -> 15, '11:00 AM' -> 11"""
     m = re.match(r'(\d+):(\d+)\s*([AP])M', depart_str)
     if m:
         h = int(m.group(1))
@@ -133,17 +306,16 @@ def parse_hour(depart_str):
         return h
     return None
 
-def query_flight_details(origin, dest, date_str, min_hour=None):
-    """查询航班详情。用列分割法解析 flights-search 表格输出。
-    min_hour: 只返回 departure hour >= min_hour 的航班 (e.g. 18 for after 6PM)"""
+def query_flight_details(origin, dest, date_str, exchange_rate, cli_path=None, skill_dir=None, min_hour=None):
+    """查询航班详情。用列分割法解析 flights-search 表格输出。"""
     # 国际航线不加 --nonstop (经停航班更便宜)
-    # 中日航线: PVG/SHA <-> KIX/HND/NRT
     is_intl = (origin in ["PVG", "SHA"] and dest in ["KIX", "HND", "NRT"]) or \
-               (origin in ["KIX", "HND", "NRT"] and dest in ["PVG", "SHA"])
-    use_nonstop = "" if is_intl else "--nonstop"
-    cmd = ["uvx", "--with", "fast-flights", "python", SCRIPT, origin, dest, date_str] + ([use_nonstop] if use_nonstop else [])
-    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=str(SKILL_DIR))
-    
+              (origin in ["KIX", "HND", "NRT"] and dest in ["PVG", "SHA"])
+    use_nonstop = [] if is_intl else ["--nonstop"]
+
+    cmd = ["uvx", "--with", "fast-flights", "python", cli_path, origin, dest, date_str] + use_nonstop
+    result = subprocess.run(cmd, capture_output=True, text=True, timeout=60, cwd=skill_dir)
+
     flights = []
     for line in result.stdout.split("\n"):
         if "Route" in line or "---" in line or "Check price" in line or not line.strip():
@@ -153,26 +325,20 @@ def query_flight_details(origin, dest, date_str, min_hour=None):
             continue
         usd_price = int(price_match.group(1))
 
-        # 列分割法: flights-search 输出用 2+ 空格分隔列
-        # 完整格式: [Depart, Arrive, Airline, Price, Duration]
         parts = re.split(r'\s{2,}', line.strip())
-        
+
         if len(parts) >= 5:
-            # 完整格式: 有 airline/depart/arrive/duration
             airline = parts[2]
-            # 提取起降时间（去掉日期部分）
             times = re.findall(r'\d{1,2}:\d{2}\s*[AP]M', line)
             depart = times[0] if times else parts[0]
             arrive = times[1] if len(times) > 1 else parts[1]
             duration = parts[4] if len(parts) > 4 else "未知"
         else:
-            # 简化格式（国际航线）: 只有价格，无详细列
             airline = "未知"
             depart = "未知"
             arrive = "未知"
             duration = "未知"
 
-        # 时间约束过滤
         if min_hour is not None and depart != "未知":
             dh = parse_hour(depart)
             if dh is not None and dh < min_hour:
@@ -180,43 +346,60 @@ def query_flight_details(origin, dest, date_str, min_hour=None):
 
         flights.append({
             "airline": airline, "usd_price": usd_price,
-            "cny_price": int(usd_price * EXCHANGE_RATE),
+            "cny_price": int(usd_price * exchange_rate),
             "depart": depart, "arrive": arrive, "duration": duration
         })
-    
+
     if flights:
         flights.sort(key=lambda x: x["usd_price"])
         return flights[0]
     return None
 
-def gen_report():
-    init_data()
-    data = load()
+# ===== 报告生成 =====
+
+def gen_report(config_path=None):
+    config = load_config(config_path)
+    data_dir = find_data_dir()
+    data_file = data_dir / "flight_prices.json"
+
+    schedule = parse_exam_schedule(config.get("exam_schedule", {}))
+    routes = build_routes(config, schedule)
+    exchange_rate = config.get("exchange_rate", 7.2)
+
+    # 查找 flights CLI
+    cli_path = find_flights_cli()
+    skill_dir = get_skill_dir(cli_path)
+    if not cli_path:
+        print("❌ 未找到 flights-search CLI！")
+        print("   安装: skillhub_install install_skill flights")
+        print("   或设置: FLIGHTS_SEARCH_PATH=/path/to/flights-search")
+        sys.exit(1)
+
+    init_data(data_file)
+    data = load(data_file)
     now = datetime.now()
-    routes = calc_flight_dates(EXAM_SCHEDULE)
-    
+
     lines = [
         "✈️ 机票监控 · 时刻表",
         "=" * 45,
         "",
         "📅 考试日程",
     ]
-    
-    # 汇总考试日程
-    for uni_name, exams in EXAM_SCHEDULE.items():
+
+    for uni_name, exams in schedule.items():
         exam_parts = []
         for exam_type, exam_date in exams.items():
             days_left = (exam_date - date.today()).days
             exam_parts.append(f"{exam_type} {fmt_date(exam_date)}({days_left}天后)")
         lines.append(f"  🏫 {uni_name}: {' | '.join(exam_parts)}")
-    
+
     lines.append("")
     lines.append("=" * 45)
     lines.append(f"📊 价格快照 ({now.strftime('%m/%d %H:%M')})")
     lines.append("=" * 45)
-    
+
     alerts = []
-    
+
     for route in routes:
         rid = route["id"]
         origin = route["from"]
@@ -225,11 +408,14 @@ def gen_report():
         label = route["label"]
         context = route["context"]
         target = route["target"]
-        
+
         days = (datetime.strptime(fdate, "%Y-%m-%d").date() - date.today()).days
         min_hour = route.get("min_departure_hour")
-        flight = query_flight_details(origin, dest, fdate, min_hour=min_hour)
-        
+        flight = query_flight_details(
+            origin, dest, fdate, exchange_rate,
+            cli_path=cli_path, skill_dir=skill_dir, min_hour=min_hour
+        )
+
         if flight:
             key = str(rid)
             if key not in data["routes"]:
@@ -237,9 +423,9 @@ def gen_report():
             rd = data["routes"][key]
             last = rd.get("last")
             hist = rd.get("history", [])
-            
+
             old_price = last.get("cny_price") if isinstance(last, dict) else None
-            
+
             if old_price:
                 change = (flight["cny_price"] - old_price) / old_price * 100
                 if abs(change) >= 5:
@@ -248,13 +434,13 @@ def gen_report():
                     change_str = "→持平"
             else:
                 change_str = "首查"
-            
+
             hist.append(flight["cny_price"])
             if len(hist) > 30:
                 hist[:] = hist[-30:]
             rd["history"] = hist
             rd["last"] = flight
-            
+
             alert = ""
             if old_price and flight["cny_price"] < old_price * 0.95:
                 alert = f"📉降价 {abs(change):.0f}%"
@@ -262,12 +448,12 @@ def gen_report():
                 alert = f"🎯达目标价 ¥{target}"
             elif hist and len(hist) > 1 and flight["cny_price"] <= min(hist[:-1]):
                 alert = "🌟历史最低"
-            
+
             if alert:
                 alerts.append(f"{alert} → {label}")
-            
+
             target_diff = flight["cny_price"] - target
-            
+
             lines.append(f"\n{rid}. 📍 {label}")
             lines.append(f"   📅 {fdate} ({days}天后) | {context}")
             if flight["airline"] != "未知":
@@ -285,21 +471,25 @@ def gen_report():
             lines.append(f"\n{rid}. 📍 {label}")
             lines.append(f"   📅 {fdate} ({days}天后) | {context}")
             lines.append(f"   ⚠️ 查询失败")
-    
+
     data["last_update"] = now.isoformat()
-    save(data)
-    
+    save(data, data_file)
+
     if alerts:
         lines.append("\n" + "=" * 45)
         lines.append("🔔 告警汇总:")
         for a in alerts:
             lines.append(f"  {a}")
-    
+
     lines.append("\n" + "=" * 45)
     lines.append("⏰ 下次检查: 9:00 / 15:00 / 21:00 / 3:00")
-    
+
     return "\n".join(lines), alerts
 
 if __name__ == "__main__":
-    report, _ = gen_report()
+    parser = argparse.ArgumentParser(description="航班价格监控")
+    parser.add_argument("--config", "-c", help="配置文件路径 (默认: ./config.yaml)")
+    args = parser.parse_args()
+
+    report, _ = gen_report(config_path=args.config)
     print(report)
