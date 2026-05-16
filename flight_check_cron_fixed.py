@@ -267,10 +267,6 @@ def build_routes(config, schedule):
         }
         if "min_departure_hour" in r:
             route["min_departure_hour"] = r["min_departure_hour"]
-        if "prefer_airline" in r:
-            route["prefer_airline"] = r["prefer_airline"]
-        if "prefer_depart_hour" in r:
-            route["prefer_depart_hour"] = r["prefer_depart_hour"]
         routes.append(route)
 
     return routes
@@ -349,7 +345,7 @@ def parse_hour(depart_str):
         return h
     return None
 
-def query_flight_details(origin, dest, date_str, exchange_rate, cli_path=None, skill_dir=None, min_hour=None, prefer_airline=None, prefer_depart_hour=None):
+def query_flight_details(origin, dest, date_str, exchange_rate, cli_path=None, skill_dir=None, min_hour=None):
     """查询航班详情。用列分割法解析 flights-search 表格输出。"""
     # 国际航线不加 --nonstop (经停航班更便宜)
     is_intl = (origin in ["PVG", "SHA"] and dest in ["KIX", "HND", "NRT"]) or \
@@ -358,11 +354,11 @@ def query_flight_details(origin, dest, date_str, exchange_rate, cli_path=None, s
 
     cmd = ["uvx", "--with", "fast-flights", "python", cli_path, origin, dest, date_str] + use_nonstop
     
-    # Retry once on timeout
+    # Try up to 2 times with timeout
     for attempt in range(2):
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=90, cwd=skill_dir)
-            if result.stdout.strip():
+            if result.returncode == 0 and result.stdout.strip():
                 break
         except subprocess.TimeoutExpired:
             if attempt == 0:
@@ -404,38 +400,8 @@ def query_flight_details(origin, dest, date_str, exchange_rate, cli_path=None, s
         })
 
     if flights:
-        # If specific flight is preferred, try to find it
-        if prefer_airline:
-            for f in flights:
-                airline_match = prefer_airline.lower() in f["airline"].lower()
-                hour_match = True
-                if prefer_depart_hour is not None and f["depart"] != "未知":
-                    dh = parse_hour(f["depart"])
-                    if dh is not None and abs(dh - prefer_depart_hour) > 1:
-                        hour_match = False
-                if airline_match and hour_match:
-                    f["preferred"] = True
-                    return f
-            return None  # Preferred not found
-        
         flights.sort(key=lambda x: x["usd_price"])
         return flights[0]
-    
-    return None
-
-# Hardcoded reference prices for focused routes
-# These are pre-verified prices from fast-flights queries
-_FALLBACKS = {
-    ("PVG", "KIX", "2026-08-01"): {"airline": "Spring", "depart": "10:30 AM", "arrive": "2:00 PM", "duration": "2 hr 30 min", "usd_price": 206, "preferred": True},
-    ("KIX", "PVG", "2026-08-03"): {"airline": "Peach Aviation", "depart": "10:25 PM", "arrive": "12:05 AM", "duration": "2 hr 40 min", "usd_price": 267, "preferred": True},
-}
-
-def _get_fallback(origin, dest, date_str, exchange_rate):
-    key = (origin, dest, date_str)
-    if key in _FALLBACKS:
-        fb = _FALLBACKS[key].copy()
-        fb["cny_price"] = int(fb["usd_price"] * exchange_rate)
-        return fb
     return None
 
 # ===== 报告生成 =====
@@ -494,16 +460,11 @@ def gen_report(config_path=None):
 
         days = (datetime.strptime(fdate, "%Y-%m-%d").date() - date.today()).days
         min_hour = route.get("min_departure_hour")
-        prefer_airline = route.get("prefer_airline")
-        prefer_depart_hour = route.get("prefer_depart_hour")
         flight = query_flight_details(
             origin, dest, fdate, exchange_rate,
-            cli_path=cli_path, skill_dir=skill_dir, min_hour=min_hour,
-            prefer_airline=prefer_airline, prefer_depart_hour=prefer_depart_hour
+            cli_path=cli_path, skill_dir=skill_dir, min_hour=min_hour
         )
-        # For focused routes, don't use stale cache data
-        is_focused = bool(route.get("prefer_airline"))
-        
+
         if flight:
             key = str(rid)
             if key not in data["routes"]:
@@ -545,8 +506,7 @@ def gen_report(config_path=None):
             lines.append(f"\n{rid}. 📍 {label}")
             lines.append(f"   📅 {fdate} ({days}天后) | {context}")
             if flight["airline"] != "未知":
-                badge = " ⭐你关注的" if flight.get("preferred") else ""
-                lines.append(f"   ✈️ {flight['airline']} | {flight['depart']}→{flight['arrive']} | {flight['duration']}{badge}")
+                lines.append(f"   ✈️ {flight['airline']} | {flight['depart']}→{flight['arrive']} | {flight['duration']}")
             lines.append(f"   💰 ¥{flight['cny_price']} (${flight['usd_price']})")
             if target_diff > 0:
                 lines.append(f"   🎯 距目标价 ¥{target} 还差 ¥{target_diff}")
