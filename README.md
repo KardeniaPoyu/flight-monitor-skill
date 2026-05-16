@@ -9,16 +9,13 @@
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 [![Stars](https://img.shields.io/github/stars/KardeniaPoyu/flight-monitor-skill?style=social)](https://github.com/KardeniaPoyu/flight-monitor-skill/stargazers)
 
-[![OpenClaw](https://img.shields.io/badge/OpenClaw-Compatible-teal)](https://github.com/titanwings/colleague-skill)
-[![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-blueviolet)](https://claude.ai/code)
-
 <br>
 
 <table>
 <tr><td align="left">
 
-✈️ &nbsp;考完研才发现机票贵了两千？<br>
-📉 &nbsp;盯着价格犹豫，回头发现最低价早已过去？<br>
+✈️ &nbsp;考完才发现机票贵了两千？<br>
+📉 &nbsp;盯着价格犹豫，回头最低价已过去？<br>
 🎯 &nbsp;多条航线要查，手动刷新根本盯不过来？<br>
 
 </td></tr>
@@ -26,7 +23,7 @@
 
 ### ✨ 机票.skill solves all three.
 
-配置考试日程 → 自动推算航班日期 → 定时查询价格 → 达标/降价即时告警
+填入考试日程 → 自动推算航班日期 → 定时查询价格 → 达标/降价即时告警
 
 <br>
 
@@ -36,7 +33,7 @@
 
 ---
 
-## 🎯 功能
+## ✨ 功能
 
 | 功能 | 说明 |
 |:----:|------|
@@ -88,19 +85,16 @@ python flight_check_cron.py
 
 ```yaml
 exam_schedule:
-  阪大:
+  Your University:
     笔试: "2026-08-01"
     面试: "2026-08-03"
-  东科大:
-    笔试: "2026-08-18"
-    面试: "2026-08-24"
 
 target_price: 1000       # 目标价格 (CNY)
 exchange_rate: 7.2       # USD → CNY
 
 routes:
-  - {id: 1, from: PVG, to: KIX, auto_date: "阪大.笔试 - 1", label: "上海→大阪"}
-  - {id: 2, from: KIX, to: PVG, auto_date: "阪大.面试",     label: "大阪→上海"}
+  - {id: 1, from: SHA, to: KIX, auto_date: "Your University.笔试 - 1", label: "出发→大阪"}
+  - {id: 2, from: KIX, to: SHA, auto_date: "Your University.面试",     label: "大阪→出发"}
 ```
 
 ### auto_date 语法
@@ -113,9 +107,9 @@ routes:
 
 | 表达式 | 含义 |
 |--------|------|
-| `"阪大.笔试 - 1"` | 笔试前一天出发 |
-| `"东大.面试 + 1"` | 面试后一天返程 |
-| `"九大.笔试"` | 笔试当天 |
+| `"Your University.笔试 - 1"` | 笔试前一天出发 |
+| `"Your University.面试 + 1"` | 面试后一天返程 |
+| `"Your University.笔试"` | 笔试当天 |
 
 ### 航线参数
 
@@ -129,11 +123,16 @@ routes:
 | `target` | — | 航线专属目标价（覆盖全局） |
 | `min_departure_hour` | — | 最早起飞小时（0–23） |
 
-### 机场代码
+### 机场代码参考
 
-| PVG | SHA | KIX | HND | NRT | FUK |
-|:---:|:---:|:---:|:---:|:---:|:---:|
-| 浦东 | 虹桥 | 关西 | 羽田 | 成田 | 福冈 |
+| 代码 | 机场 | 地区 |
+|:---:|:---|:---:|
+| SHA / PVG | 上海虹桥 / 浦东 | 🇨🇳 |
+| PEK / PKX | 北京首都 / 大兴 | 🇨🇳 |
+| CAN / SZX | 广州 / 深圳 | 🇨🇳 |
+| KIX / ITM | 大阪关西 / 伊丹 | 🇯🇵 |
+| HND / NRT | 东京羽田 / 成田 | 🇯🇵 |
+| FUK / CTS | 福冈 / 札幌 | 🇯🇵 |
 
 ---
 
@@ -146,7 +145,7 @@ python flight_check_cron.py --check
 # 运行监控
 python flight_check_cron.py
 
-# 指定配置
+# 指定配置文件
 python flight_check_cron.py --config ~/my-config.yaml
 ```
 
@@ -155,33 +154,24 @@ python flight_check_cron.py --config ~/my-config.yaml
 ```
 ✈️ 机票监控 · 时刻表
 =============================================
+
 📅 考试日程
-  🏫 阪大: 笔试 8/1(77天后) | 面试 8/3(79天后)
-  🏫 东科大: 笔试 8/18(94天后) | 面试 8/24(100天后)
+  🏫 Your University: 笔试 8/1 (77天后) | 面试 8/3 (79天后)
 
 =============================================
 📊 价格快照 (05/16 10:31)
 =============================================
 
-1. 📍 上海→大阪
-   📅 2026-07-31 (76天后) | 阪大笔试前1天
+1. 📍 出发→大阪
+   📅 2026-07-31 (76天后)
    ✈️ Peach Aviation | 6:15 AM→9:35 AM | 2 hr 20 min
    💰 ¥1224 ($170)
    🎯 距目标价 ¥1000 还差 ¥224
    🔔 🌟历史最低
 
-4. 📍 东京→福冈
-   📅 2026-08-24 (100天后) | 九大笔试前1天
-   ✈️ Skymark | 6:20 AM→8:15 AM | 1 hr 55 min
-   💰 ¥504 ($70)
-   ✅ 已达目标价 ¥1000
-   🔔 🎯达目标价 ¥1000
-
 =============================================
 🔔 告警汇总:
-  🎯达目标价 ¥1000 → 东京→福冈
-  📉降价 9% → 上海→东京
-  🌟历史最低 → 上海→大阪
+  🌟历史最低 → 出发→大阪
 ```
 
 ---
@@ -200,7 +190,7 @@ crontab -e
 ### Linux — systemd timer
 
 <details>
-<summary>Click to expand</summary>
+<summary>点击展开</summary>
 
 ```ini
 # /etc/systemd/system/flight-monitor.timer
@@ -225,7 +215,7 @@ sudo systemctl enable --now flight-monitor.timer
 ### Windows — Task Scheduler
 
 <details>
-<summary>Click to expand</summary>
+<summary>点击展开</summary>
 
 1. 打开「任务计划程序」
 2. 创建基本任务 → 每天 9:00 和 21:00
@@ -254,7 +244,9 @@ flight-monitor-skill/
 ├── flight_monitor.sh       # Linux crontab 封装
 ├── config.yaml             # 配置文件模板
 ├── SKILL.md               # Skill 元数据
-├── README.md               # 本文档
+├── README.md              # 本文档
+├── LICENSE                # MIT License
+├── .gitignore             # Git 忽略规则
 └── data/                   # 价格历史 (运行时生成)
     └── flight_prices.json
 ```
@@ -266,7 +258,6 @@ flight-monitor-skill/
 | 问题 | 方案 |
 |------|------|
 | `❌ 未找到 flights-search CLI` | `skillhub_install install_skill flights` |
-| 国际航线比记忆中贵 | 正常，经停比直飞便宜但总价更低 |
 | `uvx: command not found` | `pip install uv` |
 | Windows 中文乱码 | 确保 config.yaml 为 UTF-8 编码 |
 
