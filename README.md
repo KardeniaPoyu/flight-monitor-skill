@@ -1,56 +1,90 @@
----
-name: 机票.skill
-description: |
-  航班价格监控。自动查询多条航线价格，达标/降价告警，配合 cron 定时运行。
-  触发词：「查机票」「机票监控」「航班价格」「机票降价」「机票提醒」「flight monitor」「机票降价提醒」。
-  支持 Windows / Linux / macOS 全平台。
-lifecycle: recurring
-deactivate_on:
-  - user-explicit-exit: true
----
+<div align="center">
 
 # ✈️ 机票.skill
 
-> 航班价格监控，自动检查多条航线，达标/降价即时告警
+### *"Cheap flights don't knock — they flash and vanish."*
+
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11+](https://img.shields.io/badge/Python-3.11%2B-blue.svg)](https://python.org)
+[![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
+[![Stars](https://img.shields.io/github/stars/KardeniaPoyu/flight-monitor-skill?style=social)](https://github.com/KardeniaPoyu/flight-monitor-skill/stargazers)
+
+[![OpenClaw](https://img.shields.io/badge/OpenClaw-Compatible-teal)](https://github.com/titanwings/colleague-skill)
+[![Claude Code](https://img.shields.io/badge/Claude%20Code-Compatible-blueviolet)](https://claude.ai/code)
+
+<br>
+
+<table>
+<tr><td align="left">
+
+✈️ &nbsp;考完研才发现机票贵了两千？<br>
+📉 &nbsp;盯着价格犹豫，回头发现最低价早已过去？<br>
+🎯 &nbsp;多条航线要查，手动刷新根本盯不过来？<br>
+
+</td></tr>
+</table>
+
+### ✨ 机票.skill solves all three.
+
+配置考试日程 → 自动推算航班日期 → 定时查询价格 → 达标/降价即时告警
+
+<br>
+
+[⚡ 快速开始](#-快速开始) · [📊 配置](#-配置) · [🚀 使用](#-使用) · [🐧 部署](#-部署) · [📂 文件结构](#-文件结构)
+
+</div>
 
 ---
 
-## 🎯 核心功能
+## 🎯 功能
 
 | 功能 | 说明 |
-|------|------|
-| 多航线监控 | 自定义任意数量航线，统一目标价管理 |
-| 达标告警 | 价格低于目标价时自动标记 🎯 |
-| 涨跌追踪 | 较上次查询涨跌 ≥5% / ≥10% 时标记 📉📈 |
-| 历史最低 | 价格创30天内新低时标记 🌟 |
-| 定时运行 | 配合 crontab / Windows Task Scheduler 自动化 |
+|:----:|------|
+| 多航线监控 | 任意数量航线，统一目标价管理 |
+| 达标告警 🎯 | 价格低于目标价自动标记 |
+| 涨跌追踪 📉📈 | 较上次查询涨跌 ≥5% / ≥10% |
+| 历史最低 🌟 | 创 30 天内新低自动标记 |
+| 定时运行 ⏰ | crontab / Task Scheduler 自动化 |
 | 全平台 | Windows / Linux / macOS 同一脚本 |
+| 零依赖 | 纯 Python，内置 YAML 解析，无需 PyYAML |
 
 ---
 
 ## ⚡ 快速开始
 
-```bash
-# 1. 安装依赖
-skillhub_install install_skill flights
+> 把下面这行丢给你的 Agent，它会帮你搞定一切：
 
-# 2. 编辑 config.yaml，填入考试日程和航线
-
-# 3. 运行
-python flight_check_cron.py
-
-# 4. 检查依赖是否就绪
-python flight_check_cron.py --check
+```text
+帮我安装机票监控 skill: https://github.com/KardeniaPoyu/flight-monitor-skill
 ```
 
-**依赖：**
-- ✅ Python 3.11+
-- ✅ uv (package runner)
-- ✅ fast-flights (通过 `uvx` 自动下载，无需手动安装)
+<details>
+<summary><b>🛠️ 手动安装</b></summary>
+
+<br>
+
+```bash
+# 1. 安装航班查询依赖
+skillhub_install install_skill flights
+
+# 2. 克隆本仓库
+git clone https://github.com/KardeniaPoyu/flight-monitor-skill
+
+# 3. 编辑 config.yaml，填入你的日程和航线
+
+# 4. 运行
+python flight_check_cron.py
+```
+
+**依赖：** Python 3.11+ · uv (package runner) · fast-flights (通过 `uvx` 自动下载)
+
+</details>
 
 ---
 
-## 📋 config.yaml 配置
+## 📊 配置
+
+编辑 `config.yaml`，所有配置项均可自定义：
 
 ```yaml
 exam_schedule:
@@ -62,16 +96,16 @@ exam_schedule:
     面试: "2026-08-24"
 
 target_price: 1000       # 目标价格 (CNY)
-exchange_rate: 7.2       # USD → CNY 汇率
+exchange_rate: 7.2       # USD → CNY
 
 routes:
   - {id: 1, from: PVG, to: KIX, auto_date: "阪大.笔试 - 1", label: "上海→大阪"}
-  - {id: 2, from: KIX, to: PVG, auto_date: "阪大.面试", label: "大阪→上海"}
+  - {id: 2, from: KIX, to: PVG, auto_date: "阪大.面试",     label: "大阪→上海"}
 ```
 
 ### auto_date 语法
 
-自动从考试日程推算航班日期，无需手动计算：
+从考试日程**自动推算航班日期**，告别手动算天数：
 
 ```
 学校名.考试类型 [+/- 天数]
@@ -83,120 +117,40 @@ routes:
 | `"东大.面试 + 1"` | 面试后一天返程 |
 | `"九大.笔试"` | 笔试当天 |
 
----
-
-## 🔧 进阶配置
-
 ### 航线参数
 
-```yaml
-routes:
-  - {id: 1, from: PVG, to: KIX, auto_date: "阪大.笔试 - 1",
-     label: "上海→大阪",
-     target: 1200}                   # 自定义目标价（覆盖全局）
-```
+| 参数 | 必填 | 说明 |
+|------|:----:|------|
+| `id` | ✅ | 唯一标识 |
+| `from` / `to` | ✅ | IATA 机场代码 |
+| `auto_date` | ✅* | 自动日期表达式（与 `date` 二选一） |
+| `date` | ✅* | 手动指定 `YYYY-MM-DD` |
+| `label` | — | 显示名称 |
+| `target` | — | 航线专属目标价（覆盖全局） |
+| `min_departure_hour` | — | 最早起飞小时（0–23） |
 
-| 参数 | 类型 | 必填 | 说明 |
-|------|------|------|------|
-| `id` | int | ✅ | 航线唯一标识 |
-| `from` | string | ✅ | 出发地 IATA 码 |
-| `to` | string | ✅ | 目的地 IATA 码 |
-| `auto_date` | string | ✅ | 自动日期表达式 |
-| `date` | string | ✅ | 或手动指定 `YYYY-MM-DD` |
-| `label` | string | ❌ | 显示名称 |
-| `target` | int | ❌ | 航线专属目标价 |
-| `min_departure_hour` | int | ❌ | 最早起飞小时（0-23） |
+### 机场代码
 
-### 机场代码参考
-
-| 代码 | 机场 | 国家 |
-|------|------|------|
-| PVG | 上海浦东 | 🇨🇳 |
-| SHA | 上海虹桥 | 🇨🇳 |
-| KIX | 关西国际机场 | 🇯🇵 |
-| HND | 东京羽田 | 🇯🇵 |
-| NRT | 东京成田 | 🇯🇵 |
-| FUK | 福冈 | 🇯🇵 |
+| PVG | SHA | KIX | HND | NRT | FUK |
+|:---:|:---:|:---:|:---:|:---:|:---:|
+| 浦东 | 虹桥 | 关西 | 羽田 | 成田 | 福冈 |
 
 ---
 
-## 🐧 Linux / macOS 部署
-
-### crontab 定时任务
+## 🚀 使用
 
 ```bash
-# 赋予执行权限
-chmod +x flight_monitor.sh
+# 检查依赖
+python flight_check_cron.py --check
 
-# 编辑 crontab
-crontab -e
+# 运行监控
+python flight_check_cron.py
 
-# 添加定时任务（每天 9:00 和 21:00 执行）
-0 9,21 * * * /path/to/flight-monitor-skill/flight_monitor.sh >> /tmp/flight_monitor.log 2>&1
+# 指定配置
+python flight_check_cron.py --config ~/my-config.yaml
 ```
 
-### systemd timer
-
-```ini
-# /etc/systemd/system/flight-monitor.timer
-[Unit]
-Description=Flight Price Monitor
-
-[Timer]
-OnCalendar=*-*-* 09:00:00
-OnCalendar=*-*-* 21:00:00
-Persistent=true
-
-[Install]
-WantedBy=timers.target
-```
-
-```bash
-sudo systemctl enable --now flight-monitor.timer
-```
-
-### AstrBot 部署
-
-AstrBot 环境已内置 CLI 路径，脚本会自动找到：
-```
-/root/AstrBot/data/skills/temp-flights-skill/skills/flights
-```
-
----
-
-## 💻 Windows 部署
-
-### Task Scheduler
-
-1. 打开「任务计划程序」
-2. 创建基本任务
-3. 触发器：每天 9:00 和 21:00
-4. 操作：启动程序
-5. 程序/脚本：`python`
-6. 参数：`flight_check_cron.py`
-7. 起始位置：`C:\path\to\flight-monitor-skill\`
-
----
-
-## 🌐 环境变量
-
-| 变量 | 说明 | 默认值 |
-|------|------|--------|
-| `FLIGHT_MONITOR_CONFIG` | 配置文件路径 | `./config.yaml` |
-| `FLIGHT_MONITOR_DATA_DIR` | 价格历史存储目录 | `./data/` |
-| `FLIGHTS_SEARCH_PATH` | flights-search CLI 路径 | 自动查找 |
-| `PYTHON` | Python 解释器 | `python3` |
-
-### 配置文件查找顺序
-
-1. `--config` 命令行参数
-2. `FLIGHT_MONITOR_CONFIG` 环境变量
-3. `./config.yaml`（脚本同目录）
-4. `~/.config/flight-monitor/config.yaml`
-
----
-
-## 📊 输出示例
+### 输出示例
 
 ```
 ✈️ 机票监控 · 时刻表
@@ -216,7 +170,7 @@ AstrBot 环境已内置 CLI 路径，脚本会自动找到：
    🎯 距目标价 ¥1000 还差 ¥224
    🔔 🌟历史最低
 
-2. 📍 东京→福冈
+4. 📍 东京→福冈
    📅 2026-08-24 (100天后) | 九大笔试前1天
    ✈️ Skymark | 6:20 AM→8:15 AM | 1 hr 55 min
    💰 ¥504 ($70)
@@ -232,24 +186,96 @@ AstrBot 环境已内置 CLI 路径，脚本会自动找到：
 
 ---
 
-## 📁 文件结构
+## 🐧 部署
+
+### Linux / macOS — crontab
+
+```bash
+chmod +x flight_monitor.sh
+crontab -e
+# 每天 9:00 和 21:00 执行
+0 9,21 * * * /path/to/flight-monitor-skill/flight_monitor.sh >> /tmp/flight.log 2>&1
+```
+
+### Linux — systemd timer
+
+<details>
+<summary>Click to expand</summary>
+
+```ini
+# /etc/systemd/system/flight-monitor.timer
+[Unit]
+Description=Flight Price Monitor
+
+[Timer]
+OnCalendar=*-*-* 09:00:00
+OnCalendar=*-*-* 21:00:00
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+```
+
+```bash
+sudo systemctl enable --now flight-monitor.timer
+```
+
+</details>
+
+### Windows — Task Scheduler
+
+<details>
+<summary>Click to expand</summary>
+
+1. 打开「任务计划程序」
+2. 创建基本任务 → 每天 9:00 和 21:00
+3. 操作 → 启动程序
+4. 程序：`python` → 参数：`flight_check_cron.py` → 起始于：`C:\path\to\flight-monitor-skill\`
+
+</details>
+
+---
+
+## 🌐 环境变量
+
+| 变量 | 说明 | 默认值 |
+|------|------|--------|
+| `FLIGHT_MONITOR_CONFIG` | 配置文件路径 | `./config.yaml` |
+| `FLIGHT_MONITOR_DATA_DIR` | 价格历史目录 | `./data/` |
+| `FLIGHTS_SEARCH_PATH` | CLI 路径 | 自动查找 |
+
+---
+
+## 📂 文件结构
 
 ```
-机票.skill/
+flight-monitor-skill/
 ├── flight_check_cron.py    # 主脚本 (跨平台)
 ├── flight_monitor.sh       # Linux crontab 封装
 ├── config.yaml             # 配置文件模板
 ├── SKILL.md               # Skill 元数据
-└── README.md               # 本文档
+├── README.md               # 本文档
+└── data/                   # 价格历史 (运行时生成)
+    └── flight_prices.json
 ```
 
 ---
 
-## ❓ 常见问题
+## ❓ FAQ
 
-| 问题 | 解决方案 |
-|------|---------|
+| 问题 | 方案 |
+|------|------|
 | `❌ 未找到 flights-search CLI` | `skillhub_install install_skill flights` |
-| 国际航线价格比记忆中高 | 正常，经停航班比直飞便宜但总价更低 |
-| `uvx: command not found` | 安装 uv：`pip install uv` |
+| 国际航线比记忆中贵 | 正常，经停比直飞便宜但总价更低 |
+| `uvx: command not found` | `pip install uv` |
 | Windows 中文乱码 | 确保 config.yaml 为 UTF-8 编码 |
+
+---
+
+<div align="center">
+
+**MIT License** © [KardeniaPoyu](https://github.com/KardeniaPoyu)
+
+<sub>Made with ✈️ for everyone who's tired of refreshing flight prices.</sub>
+
+</div>
