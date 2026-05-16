@@ -75,11 +75,10 @@ def parse_yaml(text):
     """简易 YAML 解析器 - 支持 key: value, 嵌套缩进, 列表"""
     result = {}
     current_dict = result
-    dict_stack = []
-    key_stack = []
-    list_mode = False
-    list_items = []
+    dict_stack = [(0, result)]  # (indent_level, dict_ref)
     list_key = None
+    list_items = []
+    in_list = False
 
     for line in text.split("\n"):
         stripped = line.strip()
@@ -88,68 +87,103 @@ def parse_yaml(text):
 
         indent = len(line) - len(line.lstrip())
 
+        # Pop back to parent when indent decreases
+        while dict_stack and indent <= dict_stack[-1][0] and len(dict_stack) > 1:
+            dict_stack.pop()
+        current_dict = dict_stack[-1][1]
+
         # 列表项
         if stripped.startswith("- "):
-            if list_key and not list_mode:
-                list_mode = True
-                list_items = []
-            if list_mode:
-                item = parse_yaml_value(stripped[2:].strip())
-                # 检查是否是 key: value 格式的列表项
-                if isinstance(item, str) and ": " in item:
-                    # 解析为字典
-                    item_dict = {}
-                    for pair in stripped[2:].strip().split(", "):
-                        if ": " in pair:
-                            k, v = pair.split(": ", 1)
-                            item_dict[k.strip()] = parse_yaml_value(v.strip())
-                    list_items.append(item_dict)
-                else:
-                    list_items.append(item)
+            in_list = True
+            val_part = stripped[2:].strip()
+            # Flow-style dict: {key: val, key: val}
+            if val_part.startswith("{") and val_part.endswith("}"):
+                item = {}
+                inner = val_part[1:-1].strip()
+                # Comma-split respecting quotes
+                buffer = ""
+                in_q = False
+                parts = []
+                for ch in inner:
+                    if ch == '"':
+                        in_q = not in_q
+                    if ch == ',' and not in_q:
+                        parts.append(buffer.strip())
+                        buffer = ""
+                    else:
+                        buffer += ch
+                if buffer.strip():
+                    parts.append(buffer.strip())
+                for part in parts:
+                    if ": " in part:
+                        k, v = part.split(": ", 1)
+                        item[k.strip()] = parse_yaml_value(v.strip())
+                list_items.append(item)
+            elif ": " in val_part:
+                # key: value 列表项 -> 字典
+                item = {}
+                for kv in val_part.split(", "):
+                    if ": " in kv:
+                        k, v = kv.split(": ", 1)
+                        item[k.strip()] = parse_yaml_value(v.strip())
+                list_items.append(item)
+            else:
+                list_items.append(parse_yaml_value(val_part))
             continue
 
-        # 如果从列表模式回到普通模式
-        if list_mode and indent == 0:
-            current_dict[list_key] = list_items
-            list_mode = False
-            list_items = []
-            list_key = None
+        # 列表结束（非列表行，刷新列表）
+        if in_list and not stripped.startswith("- "):
+            if list_key:
+                current_dict[list_key] = list_items
+                list_items = []
+                list_key = None
+                in_list = False
 
         # key: value
         if ": " in stripped:
             key, value = stripped.split(": ", 1)
             key = key.strip()
             value = value.strip()
-
-            if value:
-                current_dict[key] = parse_yaml_value(value)
-            else:
-                # 嵌套字典或列表的开始
-                dict_stack.append(current_dict)
-                key_stack.append(key)
-                current_dict[key] = {}
-                current_dict = current_dict[key]
+            current_dict[key] = parse_yaml_value(value)
         elif stripped.endswith(":"):
             key = stripped[:-1].strip()
-            dict_stack.append(current_dict)
-            key_stack.append(key)
             current_dict[key] = {}
+            dict_stack.append((indent, current_dict[key]))
             current_dict = current_dict[key]
-            # 也可能是列表
             list_key = key
 
-    # 收尾
-    if list_mode and list_key:
-        # 找到 list_key 所在的字典
-        target = result
-        # 简单处理: 直接设置
-        if list_key in result:
-            result[list_key] = list_items
+    # 清理最后列表
+    if in_list and list_key:
+        result[list_key] = list_items
 
     return result
 
 def parse_yaml_value(value):
-    """解析 YAML 值"""
+    """解析 YAML 值，包括 flow-style dict {k: v, k: v}"""
+    # Flow-style dict: {key: value, key: value}
+    if value.startswith("{") and value.endswith("}"):
+        inner = value[1:-1].strip()
+        result = {}
+        # Handle quoted strings with commas inside
+        buffer = ""
+        in_quote = False
+        parts = []
+        for ch in inner:
+            if ch == '"':
+                in_quote = not in_quote
+            if ch == ',' and not in_quote:
+                parts.append(buffer.strip())
+                buffer = ""
+            else:
+                buffer += ch
+        if buffer.strip():
+            parts.append(buffer.strip())
+        for part in parts:
+            if ": " in part:
+                k, v = part.split(": ", 1)
+                result[k.strip()] = parse_yaml_value(v.strip())
+        return result
+    # Quoted string
     if value.startswith('"') and value.endswith('"'):
         return value[1:-1]
     if value.lower() in ("true", "yes"):
