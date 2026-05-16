@@ -1,0 +1,72 @@
+# ===== 考试日程 (修改这里适配你的考试安排) =====
+exam_schedule:
+  阪大:
+    笔试: "2026-08-01"
+    面试: "2026-08-03"
+  东科大:
+    笔试: "2026-08-18"
+    面试: "2026-08-24"
+  东大:
+    笔试: "2026-08-20"
+    専門: "2026-08-26"
+    面试: "2026-08-27"
+  九大:
+    笔试: "2026-08-25"
+
+# ===== 目标价格 (CNY) =====
+target_price: 1000
+
+# ===== 汇率 =====
+exchange_rate: 7.2
+
+# ===== 航线 (留空会自动从考试日程推导，也可以手动指定) =====
+# id: 唯一标识
+# from/to: IATA 代码 (PVG/SHA/KIX/HND/NRT/FUK)
+# date: YYYY-MM-DD，留空则自动计算
+# label: 显示标签
+# context: 备注
+# min_departure_hour: 最早起飞时间（可选）
+routes:
+  - id: 1
+    from: PVG
+    to: KIX
+    auto_date: "阪大.笔试 - 1"
+    label: "上海→大阪"
+    context: "阪大笔试前1天"
+
+  - id: 2
+    from: KIX
+    to: PVG
+    auto_date: "阪大.面试"
+    label: "大阪→上海"
+    context: "阪大面试当天"
+    min_departure_hour: 18
+
+  - id: 3
+    from: PVG
+    to: HND
+    auto_date: "东科大.笔试 - 1"
+    label: "上海→东京"
+    context: "东科大笔试前1天"
+
+  - id: 4
+    from: HND
+    to: FUK
+    auto_date: "九大.笔试 - 1"
+    label: "东京→福冈"
+    context: "九大笔试前1天 ⚠️"
+
+  - id: 5
+    from: FUK
+    to: HND
+    auto_date: "九大.笔试"
+    label: "福冈→东京"
+    context: "九大笔试当天回"
+    min_departure_hour: 18
+
+  - id: 6
+    from: HND
+    to: PVG
+    auto_date: "东大.面试 + 1"
+    label: "东京→上海"
+    context: "东大口述次日回国"
