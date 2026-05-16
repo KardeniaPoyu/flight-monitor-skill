@@ -416,10 +416,8 @@ def query_flight_details(origin, dest, date_str, exchange_rate, cli_path=None, s
                 if airline_match and hour_match:
                     f["preferred"] = True
                     return f
-            # Preferred flight not found in results, check fallbacks
-            fb = _get_fallback(origin, dest, date_str, exchange_rate)
-            if fb:
-                return fb
+            return None  # Preferred not found
+        
         flights.sort(key=lambda x: x["usd_price"])
         return flights[0]
     
@@ -503,7 +501,9 @@ def gen_report(config_path=None):
             cli_path=cli_path, skill_dir=skill_dir, min_hour=min_hour,
             prefer_airline=prefer_airline, prefer_depart_hour=prefer_depart_hour
         )
-
+        # For focused routes, don't use stale cache data
+        is_focused = bool(route.get("prefer_airline"))
+        
         if flight:
             key = str(rid)
             if key not in data["routes"]:
