@@ -1,38 +1,84 @@
 # Flight Monitor Skill
 
-监控日本考研航线的价格，自动检查达标推送。
+监控航班价格，自动检查达标推送。适合考试、旅行等定时航班需求。
 
-## 功能
+## 特性
 
-- 监控 6 条中日航线价格
-- 自动对比目标价 ¥1000
-- 4 次/天 自动检查（3/9/15/21点）
-- 微信推送告警
+- 📊 6 条航线价格监控
+- 🎯 自定义目标价，达标告警
+- 📉 价格涨跌追踪 (5%/10%阈值)
+- ⏰ 支持定时自动检查 (配合 cron)
+- 🔧 纯 Python，无外部依赖 (无需 PyYAML)
+- 📁 通过 config.yaml 配置，无需修改代码
 
 ## 安装
 
 ```bash
-# 依赖已内置，uvx自动下载
-uv --version  # 需已安装
+# 安装航班查询 CLI
+skillhub_install install_skill flights
+
+# 安装本 skill
+skillhub_install install_skill_zip flight-monitor-skill.zip
 ```
+
+依赖：
+- Python 3.11+
+- uv (Package runner)
+- fast-flights (通过 uvx 自动下载)
+
+## 配置
+
+复制 `config.yaml` 到你的工作目录，修改考试日程：
+
+```yaml
+exam_schedule:
+  阪大:
+    笔试: "2026-08-01"
+    面试: "2026-08-03"
+
+target_price: 1000       # 目标价格 (CNY)
+exchange_rate: 7.2       # 汇率
+
+routes:
+  - id: 1
+    from: PVG
+    to: KIX
+    auto_date: "阪大.笔试 - 1"   # 阪大笔试前1天
+    label: "上海→大阪"
+```
+
+### auto_date 语法
+
+```
+学校名.考试类型 [+/- 天数]
+```
+
+示例：
+- `"阪大.笔试 - 1"` → 阪大笔试前1天
+- `"东大.面试 + 1"` → 东大面试后1天
+- `"九大.笔试"` → 九大笔试当天
 
 ## 使用
 
 ```bash
-# 手动运行
-python C:\Users\LENOVO\.agents\skills\flight-monitor\flight_check_cron.py
+# 默认配置 (config.yaml 在同目录)
+python flight_check_cron.py
 
-# 查看帮助
-python C:\Users\LENOVO\.agents\skills\flight-monitor\flight_check_cron.py --help
+# 指定配置文件
+python flight_check_cron.py --config ~/my-exam-config.yaml
+
+# 环境变量
+export FLIGHT_MONITOR_CONFIG=/path/to/config.yaml
+export FLIGHT_MONITOR_DATA_DIR=/path/to/data/
+export FLIGHTS_SEARCH_PATH=/path/to/flights-search
 ```
 
-## 配置
+## 配置文件优先级
 
-修改脚本中的 `EXAM_SCHEDULE` 字典可以调整考试日期。
-
-## 定时任务
-
-脚本运行后会将 cron jobs 写入 `C:\Users\LENOVO\.qclaw\data\flight_monitor\` 目录。
+1. `--config` 命令行参数
+2. `FLIGHT_MONITOR_CONFIG` 环境变量
+3. `./config.yaml` (脚本同目录)
+4. `~/.config/flight-monitor/config.yaml`
 
 ## 输出示例
 
@@ -40,21 +86,29 @@ python C:\Users\LENOVO\.agents\skills\flight-monitor\flight_check_cron.py --help
 ✈️ 机票监控 · 时刻表
 =============================================
 📅 考试日程
-  🏫 阪大: 笔试 8/1 | 面试 8/3
-  ...
+  🏫 阪大: 笔试 8/1(77天后) | 面试 8/3(79天后)
 
-📊 价格快照
-1. 📍 上海→大阪 (考前1天)
+📊 价格快照 (05/16 10:00)
+=============================================
+1. 📍 上海→大阪
+   📅 2026-07-31 (76天后)
+   ✈️ Peach Aviation | 6:15 AM→9:35 AM | 2 hr 20 min
    💰 ¥1231 ($171)
    🎯 距目标价 ¥1000 还差 ¥231
 ```
 
-## 依赖
+## 配合 Cron 使用
 
-- Python 3.11+
-- uv (Package runner)
-- fast-flights (通过 uvx 自动下载)
+```bash
+# crontab (Linux/Mac)
+0 3,9,15,21 * * * python ~/.config/flight-monitor/flight_check_cron.py
+```
 
-## 文件
+## 文件结构
 
-- `flight_check_cron.py` - 主脚本
+```
+flight-monitor-skill/
+├── flight_check_cron.py    # 主脚本
+├── config.yaml             # 配置文件
+└── SKILL.md                # 本文档
+```
