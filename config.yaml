@@ -1,21 +1,30 @@
-# ===== 考试日程 (修改这里适配你的考试安排) =====
-# 格式: 学校名 > 考试类型 > 日期 (YYYY-MM-DD)
+# ===== 考试日程 =====
 exam_schedule:
-  Example University:
+  阪大:
     笔试: "2026-08-01"
     面试: "2026-08-03"
+  东科大:
+    笔试: "2026-08-18"
+    面试: "2026-08-24"
+  东大:
+    笔试: "2026-08-20"
+    専門: "2026-08-26"
+    面试: "2026-08-27"
+  九大:
+    笔试: "2026-08-25"
 
-# ===== 目标价格 (CNY) =====
 target_price: 1000
-
-# ===== 汇率 (USD → CNY) =====
 exchange_rate: 7.2
 
-# ===== 航线 =====
-# auto_date 语法: "学校名.考试类型 [+/- 天数]"
-#   示例: "Example University.笔试 - 1" = 笔试前一天
-#   示例: "Example University.面试 + 1" = 面试后一天
-# min_departure_hour: 最早起飞时间 (可选, 0-23)
 routes:
-  - {id: 1, from: SHA, to: KIX, auto_date: "Example University.笔试 - 1", label: "出发→大阪"}
-  - {id: 2, from: KIX, to: SHA, auto_date: "Example University.面试", label: "大阪→出发"}
+  # ===== 通用追踪 =====
+  - {id: 1, from: PVG, to: KIX, auto_date: "阪大.笔试 - 1", label: "上海→大阪 (考前1天)", min_departure_hour: 0}
+  - {id: 2, from: KIX, to: PVG, auto_date: "阪大.面试", label: "大阪→上海 (面试当天)", min_departure_hour: 0}
+  - {id: 3, from: PVG, to: HND, auto_date: "东科大.笔试 - 1", label: "上海→东京 (东科大考前1天)", min_departure_hour: 0}
+  - {id: 4, from: HND, to: FUK, auto_date: "九大.笔试 - 1", label: "东京→福冈 (九大考前1天)", min_departure_hour: 0}
+  - {id: 5, from: FUK, to: HND, auto_date: "九大.笔试", label: "福冈→东京 (九大当天回)", min_departure_hour: 18}
+  - {id: 6, from: HND, to: PVG, auto_date: "东大.面试 + 1", label: "东京→上海 (返程)", min_departure_hour: 0}
+
+  # ===== ⭐ 重点追踪 =====
+  - {id: 101, from: PVG, to: KIX, auto_date: "阪大.笔试", label: "⭐ 8/1 春秋航空 10:30→14:00", prefer_airline: "Spring", prefer_depart_hour: 10, min_departure_hour: 0}
+  - {id: 102, from: KIX, to: PVG, auto_date: "阪大.面试", label: "⭐ 8/3 乐桃 22:25→00:05", prefer_airline: "Peach", prefer_depart_hour: 22, min_departure_hour: 0}
