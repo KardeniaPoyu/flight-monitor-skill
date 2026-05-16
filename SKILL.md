@@ -2,7 +2,7 @@
 name: 机票.skill
 description: |
   航班价格监控。自动查询多条航线价格，达标/降价告警，配合 cron 定时运行。
-  触发词：「查机票」「机票监控」「航班价格」「机票降价」「机票提醒」「flight monitor」「机票降价提醒」。
+  触发词：「查机票」「机票监控」「航班价格」「机票降价」「机票提醒」「flight monitor」。
   支持 Windows / Linux / macOS 全平台。
 lifecycle: recurring
 deactivate_on:
@@ -44,7 +44,7 @@ chmod +x flight_monitor.sh
 
 ```yaml
 exam_schedule:
-  学校名:
+  Your University:
     笔试: "2026-08-01"
     面试: "2026-08-03"
 
@@ -52,7 +52,7 @@ target_price: 1000
 exchange_rate: 7.2
 
 routes:
-  - {id: 1, from: PVG, to: KIX, auto_date: "学校名.笔试 - 1", label: "上海→大阪"}
+  - {id: 1, from: SHA, to: KIX, auto_date: "Your University.笔试 - 1", label: "出发→大阪"}
 ```
 
 ### auto_date
