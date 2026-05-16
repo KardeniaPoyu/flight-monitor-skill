@@ -525,10 +525,75 @@ def gen_report(config_path=None):
 
     return "\n".join(lines), alerts
 
+def check_deps():
+    """检查依赖是否就绪"""
+    print("🔍 依赖检查")
+    print("=" * 35)
+    ok = True
+
+    # Python
+    print(f"  Python: {sys.version.split()[0]}", end="")
+    if sys.version_info >= (3, 11):
+        print(" ✅")
+    else:
+        print(" ⚠️ 需要 3.11+")
+        ok = False
+
+    # uv / uvx
+    try:
+        r = subprocess.run(["uvx", "--version"], capture_output=True, text=True, timeout=10)
+        print(f"  uvx: {r.stdout.strip()}", end="")
+        print(" ✅")
+    except FileNotFoundError:
+        print("  uvx: 未安装 ❌")
+        ok = False
+
+    # flights-search CLI
+    cli = find_flights_cli()
+    if cli:
+        print(f"  flights-search: {cli} ✅")
+    else:
+        print("  flights-search: 未找到 ❌")
+        print("    → 安装: skillhub_install install_skill flights")
+        print("    → 或设置: FLIGHTS_SEARCH_PATH=/path/to/flights-search")
+        ok = False
+
+    # config.yaml
+    cfg = find_config()
+    if cfg:
+        print(f"  config.yaml: {cfg} ✅")
+        # 尝试解析
+        try:
+            config = load_config(cfg)
+            n_routes = len(config.get("routes", []))
+            n_schools = len(config.get("exam_schedule", {}))
+            print(f"    航线: {n_routes} 条 | 学校: {n_schools} 所")
+        except Exception as e:
+            print(f"    ⚠️ 解析失败: {e}")
+            ok = False
+    else:
+        print("  config.yaml: 未找到 ❌")
+        ok = False
+
+    # data dir
+    data_dir = find_data_dir()
+    print(f"  数据目录: {data_dir} ✅")
+
+    print("=" * 35)
+    if ok:
+        print("✅ 全部就绪，可以运行！")
+    else:
+        print("❌ 部分依赖缺失，请按提示安装")
+    return ok
+
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="航班价格监控")
+    parser = argparse.ArgumentParser(description="✈️ 机票价格监控 - 机票.skill")
     parser.add_argument("--config", "-c", help="配置文件路径 (默认: ./config.yaml)")
+    parser.add_argument("--check", "-k", action="store_true", help="检查依赖是否就绪")
     args = parser.parse_args()
 
-    report, _ = gen_report(config_path=args.config)
-    print(report)
+    if args.check:
+        check_deps()
+    else:
+        report, _ = gen_report(config_path=args.config)
+        print(report)
