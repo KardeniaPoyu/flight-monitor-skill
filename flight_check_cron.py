@@ -293,22 +293,27 @@ def save(data, data_file):
 # ===== 航班查询 =====
 
 def find_flights_cli():
-    """自动查找 flights-search CLI 路径"""
+    """自动查找 flights-search CLI 路径 - 支持 Linux/Windows/macOS"""
     # 1. 环境变量
     env_path = os.environ.get("FLIGHTS_SEARCH_PATH")
     if env_path and Path(env_path).exists():
         return env_path
 
-    # 2. 常见 skill 安装位置
-    candidates = [
-        Path.home() / ".agents" / "skills" / "flights" / "scripts" / "flights-search",
-        Path.home() / ".qclaw" / "skills" / "flights" / "scripts" / "flights-search",
-    ]
-    # Windows 也检查
+    # 2. 常见 skill 安装位置 - 按平台
     if sys.platform == 'win32':
         candidates = [
             Path.home() / ".agents" / "skills" / "flights" / "scripts" / "flights-search",
             Path.home() / ".qclaw" / "skills" / "flights" / "scripts" / "flights-search",
+        ]
+    else:
+        # Linux / macOS
+        candidates = [
+            Path.home() / ".agents" / "skills" / "flights" / "scripts" / "flights-search",
+            Path.home() / ".qclaw" / "skills" / "flights" / "scripts" / "flights-search",
+            # AstrBot 部署路径
+            Path("/root/AstrBot/data/skills/temp-flights-skill/skills/flights/scripts/flights-search"),
+            Path("/home") / os.environ.get("USER", "") / ".agents" / "skills" / "flights" / "scripts" / "flights-search",
+            Path("/usr/local/share/flights/scripts/flights-search"),
         ]
 
     for c in candidates:
